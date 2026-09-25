@@ -10,7 +10,7 @@ const JaiRequest = z.object({
 		}),
 	),
 	model: z.string().nonempty(),
-	stream: z.boolean(),
+	stream: z.boolean().optional(),
 	temperature: z.number().min(0.0).max(2.0),
 });
 
