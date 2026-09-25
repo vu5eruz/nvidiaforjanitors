@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
 
 /**
@@ -38,6 +38,17 @@ function postJson(body: string, headers: Record<string, string> = {}): Request {
 async function expectErrorResponse(response: Response, status: number, message: string): Promise<Response> {
 	expect(response.status).toBe(status);
 	expect(await response.text()).toBe(message);
+	return response;
+}
+
+/** Consumes the body asserting the 400 status, the message prefix and any details. */
+async function expectPayloadError(response: Response, ...fragments: string[]): Promise<Response> {
+	expect(response.status).toBe(400);
+	const body = await response.text();
+	expect(body.startsWith('Missing/Invalid request payload')).toBe(true);
+	// The parsing details are always included after the generic message.
+	expect(body.length).toBeGreaterThan('Missing/Invalid request payload'.length);
+	for (const fragment of fragments) expect(body).toContain(fragment);
 	return response;
 }
 
@@ -198,61 +209,43 @@ describe('415 Unsupported Media Type: Content-Type header', () => {
 		'application/json;charset=utf-8', // the space after ; is optional
 	])('accepts Content-Type %j, so the request fails later at the payload', async (contentType) => {
 		const response = await fetchWorker(postJson('{}', { 'Content-Type': contentType }));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
+		await expectPayloadError(response);
 	});
 });
 
-describe('415 Unsupported Media Type: request payload', () => {
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
+describe('400 Bad Request: request payload', () => {
 	it.each(['this is not json', '{', ''])('rejects bodies that are not JSON (%j)', async (body) => {
 		const response = await fetchWorker(postJson(body));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
+		// Whatever detail the runtime reports for the syntax error is surfaced.
+		await expectPayloadError(response);
 	});
 
 	it.each(['null', '[]', '"hello"', '42'])('rejects JSON values that are not request objects (%j)', async (body) => {
 		const response = await fetchWorker(postJson(body));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
+		await expectPayloadError(response, 'payload: ', 'expected object');
 	});
 
-	it('rejects payloads missing required fields', async () => {
-		const response = await fetchWorker(postJson('{ "model": "meta/llama-3.1-405b-instruct", "stream": false }'));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
-	});
-
-	it.each(
-		Object.entries({
-			'messages is not an array': { messages: 'hello' },
-			'messages contains a role outside the enum': { messages: [{ content: 'hello', role: 'banana' }] },
-			'messages contains empty content': { messages: [{ content: '', role: 'user' }] },
-			'model is empty': { model: '' },
-			'stream is not a boolean': { stream: 'false' },
-			'temperature is above the maximum': { temperature: 2.5 },
-			'temperature is negative': { temperature: -0.1 },
-			'temperature is not a number': { temperature: '0.5' },
-		}),
-	)('rejects payloads where %s', async (_description, mutation) => {
-		const response = await fetchWorker(postJson(JSON.stringify({ ...VALID_PAYLOAD, ...mutation })));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
-	});
-
-	it('logs the Zod issues for schema failures', async () => {
-		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+	it('rejects payloads missing required fields, naming each one', async () => {
 		const response = await fetchWorker(postJson('{}'));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
-		expect(log).toHaveBeenCalledTimes(1);
-		const issues = log.mock.calls[0]?.[0];
-		expect(Array.isArray(issues)).toBe(true);
-		if (Array.isArray(issues)) expect(issues.length).toBeGreaterThan(0);
+		await expectPayloadError(response, 'messages:', 'model:', 'stream:', 'temperature:');
 	});
 
-	it('does not log issues when the body is not valid JSON', async () => {
-		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-		const response = await fetchWorker(postJson('this is not json'));
-		await expectErrorResponse(response, 415, 'Missing/Invalid request payload');
-		expect(log).not.toHaveBeenCalled();
+	it.each([
+		['messages is not an array', { messages: 'hello' }, ['messages:', 'expected array']],
+		[
+			'messages contains a role outside the enum',
+			{ messages: [{ content: 'hello', role: 'banana' }] },
+			['messages.0.role: ', 'Invalid option'],
+		],
+		['messages contains empty content', { messages: [{ content: '', role: 'user' }] }, ['messages.0.content: ', 'Too small']],
+		['model is empty', { model: '' }, ['model:', 'Too small']],
+		['stream is not a boolean', { stream: 'false' }, ['stream:', 'expected boolean']],
+		['temperature is above the maximum', { temperature: 2.5 }, ['temperature:', 'Too big']],
+		['temperature is negative', { temperature: -0.1 }, ['temperature:', 'Too small']],
+		['temperature is not a number', { temperature: '0.5' }, ['temperature:', 'expected number']],
+	])('rejects payloads where %s', async (_description, mutation, fragments) => {
+		const response = await fetchWorker(postJson(JSON.stringify({ ...VALID_PAYLOAD, ...mutation })));
+		await expectPayloadError(response, ...fragments);
 	});
 });
 

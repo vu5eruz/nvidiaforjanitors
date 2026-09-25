@@ -1,11 +1,11 @@
-import { parseCommaList } from './utils';
+import { parseCommaList, summarizePayloadError } from './utils';
 import 'zod/compile';
-import * as z from 'zod';
+import z from 'zod';
 
 const JaiRequest = z.object({
 	messages: z.array(
 		z.object({
-			content: z.string().nonempty(),
+			content: z.string().trim().nonempty(),
 			role: z.enum(['system', 'user', 'assistant']),
 		}),
 	),
@@ -114,9 +114,8 @@ export default {
 		try {
 			payload = JaiRequest.parse(await request.json());
 		} catch (error) {
-			if (error instanceof z.ZodError) console.log(error.issues);
-			return new Response('Missing/Invalid request payload', {
-				status: 415,
+			return new Response(`Missing/Invalid request payload: ${summarizePayloadError(error)}`, {
+				status: 400,
 				headers: { ...corsHeaders },
 			});
 		}
