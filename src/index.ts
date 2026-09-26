@@ -11,6 +11,7 @@ const JaiRequest = z.object({
 	model: z.string().nonempty(),
 	stream: z.boolean().optional(),
 	/////
+	max_tokens: z.int().min(0).optional(),
 	frequency_penalty: z.number().optional(),
 	repetition_penalty: z.number().optional(),
 	temperature: z.number().min(0.0).max(2.0).optional(),
@@ -133,6 +134,40 @@ export default {
 			});
 		}
 
+		// Detect if the request is either a chat message or a proxy test.
+		// As of September 25, 2026, JanitorAI's proxy test requests can be identified
+		// as a single user message with the text "Just say TEST".
+		const isProxyTest =
+			payload.messages.length === 1 && //
+			payload.messages[0].role === 'user' && //
+			payload.messages[0].content === 'Just say TEST';
+
+		// JanitorAI's proxy test requests expect errors to be wrapped in a JSON object
+		// with an error key, whose string content will be displayed unformatted, thus
+		// we have to add the formatting ourselves.
+		function errorResponseForProxyTest(status: number, message: string) {
+			return Response.json(
+				{ error: `PROXY ERROR ${status}:\n${message}` },
+				{
+					status: status,
+					headers: { ...corsHeaders },
+				},
+			);
+		}
+
+		// JanitorAI's chat message requests, as well as other requests besides proxy test,
+		// expect errors to be provided in plain text, which will be formatted before being
+		// shown in the UI.
+		function errorResponseForChatMessage(status: number, message: string) {
+			return new Response(`\n${message}`, {
+				status: status,
+				headers: { ...corsHeaders },
+			});
+		}
+
+		// Select error response function depending on whether the request is a proxy test.
+		const errorResponse = isProxyTest ? errorResponseForProxyTest : errorResponseForChatMessage;
+
 		// Dispatch the request to NVIDIA NIM.
 		const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
 			method: 'POST',
@@ -143,6 +178,19 @@ export default {
 				'Content-Type': 'application/json',
 			},
 		});
+
+		if (response.status !== 200) {
+			let errorContentType = (response.headers.get('Content-Type') || '').trim().toLowerCase();
+			let errorIsJson = errorContentType.match(/json/i);
+
+			let message: string = errorIsJson
+				? await response
+						.json()
+						.then((data: any) => data.detail)
+						.catch((error) => error)
+				: await response.text();
+			return errorResponse(response.status, message);
+		}
 
 		// Rely on Cloudflare Workers' passthrough behavior to avoid recompression
 		return new Response(response.body, {
