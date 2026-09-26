@@ -1,4 +1,3 @@
-import { parseCommaList, summarizePayloadError } from './utils';
 import 'zod/compile';
 import z from 'zod';
 
@@ -22,7 +21,7 @@ const JaiRequest = z.object({
 type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
-	async fetch(request: Request, _env: Env): Promise<Response> {
+	async fetch(request: Request): Promise<Response> {
 		// Prepare common response headers for permissive CORS support.
 		// All origins are allowed to maximize coverage. Since users have to first fully
 		// trust websites with their API keys, there are no security implications.
@@ -95,7 +94,10 @@ export default {
 				headers: { ...corsHeaders, 'WWW-Authenticate': 'Bearer' },
 			});
 		}
-		const rawApiKeys = parseCommaList(authorization[1]);
+		const rawApiKeys = authorization[1]
+			.split(',')
+			.map((t) => t.trim())
+			.filter(Boolean);
 		if (rawApiKeys.length < 1) {
 			return new Response('At least one API key is required', {
 				status: 401,
@@ -119,7 +121,13 @@ export default {
 		try {
 			payload = JaiRequest.parse(await request.json());
 		} catch (error) {
-			return new Response(`Missing/Invalid request payload: ${summarizePayloadError(error)}`, {
+			const summary =
+				error instanceof z.ZodError
+					? error.issues.map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`).join('; ')
+					: error instanceof Error
+						? error.message
+						: String(error);
+			return new Response(`Missing/Invalid request payload: ${summary}`, {
 				status: 400,
 				headers: { ...corsHeaders },
 			});
