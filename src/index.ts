@@ -22,7 +22,7 @@ const JaiRequest = z.object({
 type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
-	async fetch(request: Request): Promise<Response> {
+	async fetch(request: Request, _env: Env): Promise<Response> {
 		// Prepare common response headers for permissive CORS support.
 		// All origins are allowed to maximize coverage. Since users have to first fully
 		// trust websites with their API keys, there are no security implications.

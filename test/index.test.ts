@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
+import { env } from 'cloudflare:workers';
 
 /**
  * Unit tests for the responses `src/index.ts` can emit.
@@ -21,7 +22,7 @@ function newRequest(path = '/', init: RequestInit = {}): Request {
 
 async function fetchWorker(request: Request): Promise<Response> {
 	// The handler's fetch takes (request, env) and never touches ctx.
-	return worker.fetch(request);
+	return worker.fetch(request, env);
 }
 
 /** A POST request with a JSON body, open for header overrides. */
