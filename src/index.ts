@@ -11,7 +11,12 @@ const JaiRequest = z.object({
 	),
 	model: z.string().nonempty(),
 	stream: z.boolean().optional(),
-	temperature: z.number().min(0.0).max(2.0),
+	/////
+	frequency_penalty: z.number().optional(),
+	repetition_penalty: z.number().optional(),
+	temperature: z.number().min(0.0).max(2.0).optional(),
+	top_k: z.number().optional(),
+	top_p: z.number().optional(),
 });
 
 type JaiRequest = z.infer<typeof JaiRequest>;
