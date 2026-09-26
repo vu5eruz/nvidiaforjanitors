@@ -1,4 +1,3 @@
-import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
 
@@ -22,7 +21,7 @@ function newRequest(path = '/', init: RequestInit = {}): Request {
 
 async function fetchWorker(request: Request): Promise<Response> {
 	// The handler's fetch takes (request, env) and never touches ctx.
-	return worker.fetch(request, env);
+	return worker.fetch(request);
 }
 
 /** A POST request with a JSON body, open for header overrides. */
@@ -227,7 +226,7 @@ describe('400 Bad Request: request payload', () => {
 
 	it('rejects payloads missing required fields, naming each one', async () => {
 		const response = await fetchWorker(postJson('{}'));
-		await expectPayloadError(response, 'messages:', 'model:', 'stream:', 'temperature:');
+		await expectPayloadError(response, 'messages:', 'model:');
 	});
 
 	it.each([

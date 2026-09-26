@@ -127,7 +127,7 @@ export default {
 					: error instanceof Error
 						? error.message
 						: String(error);
-			return new Response(`Missing/Invalid request payload: ${summary}`, {
+			return new Response(`Missing/Invalid request payload:\n${summary}`, {
 				status: 400,
 				headers: { ...corsHeaders },
 			});
