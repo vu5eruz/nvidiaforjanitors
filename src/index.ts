@@ -134,6 +134,16 @@ export default {
 			});
 		}
 
+		// If stream is omitted, like during proxy tests, default it to false, as NVIDIA NIM
+		// might default to a streaming response, which messes up proxy tests.
+		if (payload.stream === undefined) payload.stream = false;
+
+		// NVIDIA NIM mostly hosts reasoning models that might take an arbitrary amount of
+		// tokens while thinking and generating responses. If the request contains a max_tokens
+		// value too low, the models might be unable to do anything useful at all, even failing
+		// proxy tests. Set max_tokens, if present, to an arbitrarily chosen minimum value.
+		if (payload.max_tokens !== undefined && payload.max_tokens < 1024) payload.max_tokens = 1024;
+
 		// Detect if the request is either a chat message or a proxy test.
 		// As of September 25, 2026, JanitorAI's proxy test requests can be identified
 		// as a single user message with the text "Just say TEST".
