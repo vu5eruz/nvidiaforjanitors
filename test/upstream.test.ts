@@ -280,6 +280,40 @@ describe('//image command embedding', () => {
 		});
 	});
 
+	it('deduplicates image fetch calls during retrieval', async () => {
+		const fetchMock = stubFetch({
+			images: {
+				'https://example.test/a.png': imageResponse(PNG_BYTES, 'image/png'),
+				'https://example.test/b.jpg': imageResponse(JPEG_BYTES, 'image/jpeg'),
+			},
+		});
+		await fetchWorker(
+			postJson({
+				...VALID_PAYLOAD,
+				messages: [
+					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/b.jpg', role: 'user' },
+					{ content: 'Carl: //image https://example.test/b.jpg', role: 'user' },
+				],
+			}),
+		);
+		// two unique image fetches and the NVIDIA NIM fetch
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(nimDispatch(fetchMock).body).toStrictEqual({
+			...VALID_PAYLOAD,
+			stream: false,
+			messages: [
+				{ content: [{ type: 'image_url', image_url: { url: PNG_DATA_URL } }], role: 'user' },
+				{ content: [{ type: 'image_url', image_url: { url: PNG_DATA_URL } }], role: 'user' },
+				{ content: [{ type: 'image_url', image_url: { url: PNG_DATA_URL } }], role: 'user' },
+				{ content: [{ type: 'image_url', image_url: { url: JPEG_DATA_URL } }], role: 'user' },
+				{ content: [{ type: 'image_url', image_url: { url: JPEG_DATA_URL } }], role: 'user' },
+			],
+		});
+	});
+
 	it.each(['assistant', 'system'])('does not process //image commands in %s messages', async (role) => {
 		const fetchMock = stubFetch();
 		const payload = { ...VALID_PAYLOAD, messages: [{ content: '//image https://example.test/pic.png', role }] };
