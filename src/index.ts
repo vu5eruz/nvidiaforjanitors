@@ -137,7 +137,7 @@ export default {
 		if (!applicationJson) {
 			return new Response('Missing/Invalid Content-Type Header', {
 				status: 415,
-				headers: { ...corsHeaders },
+				headers: corsHeaders,
 			});
 		}
 
@@ -154,7 +154,7 @@ export default {
 						: String(error);
 			return new Response(`Missing/Invalid request payload:\n${summary}`, {
 				status: 400,
-				headers: { ...corsHeaders },
+				headers: corsHeaders,
 			});
 		}
 
@@ -184,7 +184,7 @@ export default {
 				{ error: `PROXY ERROR ${status}:\n${message}` },
 				{
 					status: status,
-					headers: { ...corsHeaders },
+					headers: corsHeaders,
 				},
 			);
 		}
@@ -195,7 +195,7 @@ export default {
 		function errorResponseForChatMessage(status: number, message: string) {
 			return new Response(`\n${message}`, {
 				status: status,
-				headers: { ...corsHeaders },
+				headers: corsHeaders,
 			});
 		}
 
