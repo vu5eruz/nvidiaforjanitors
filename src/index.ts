@@ -297,7 +297,17 @@ export default {
 			return errorResponse(403, 'No more than 10 //image commands allowed.');
 		}
 
-		// TODO: Promise.all this stuff, then Promise.race it against a timeout.
+		// Workers have a 128 MB memory limit per isolate.
+		// While an isolate can handle concurrent requests, for simpliciy, let's assume that
+		// we have the full 128 MB of memory to ourselves on each individual request.
+		// We allow downloading up to 10 images, 6 MiB each, at worst. That'll make the isolate
+		// consume 60 MiB of memory. We then have to encode these images into base64, which will
+		// increase memory consumption by an approximate factor of 4/3, thus we'll consume 80 MiB
+		// or so in the worst case.
+		// Let's hope that leaves enough wiggle room for anything else going on.
+		const maxContentLength = 6 * 1024 * 1024;
+
+		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
 		for (const imagePart of imageParts) {
 			console.log(imagePart.image_url.url);
@@ -333,8 +343,8 @@ export default {
 				imageErrorList.push(`Missing/Invalid Content-Length ${url}`);
 				continue;
 			}
-			if (contentLength > 8 * 1024 * 1024) {
-				imageErrorList.push(`Content-Length is larger than 8 MiB ${url}`);
+			if (contentLength > maxContentLength) {
+				imageErrorList.push(`Content-Length is larger than 6 MiB ${url}`);
 				continue;
 			}
 
@@ -348,7 +358,18 @@ export default {
 			// While a malicious server can send a response so big it leads the worker to OOM,
 			// a faster way to cause OOM is having the user make a massive request. For simplicity
 			// of implementation, we trust the users and external servers not to OOM the worker.
-			const imageData = Buffer.from(await response.arrayBuffer());
+			let imageData: Buffer;
+			try {
+				imageData = Buffer.from(await response.arrayBuffer());
+			} catch {
+				imageErrorList.push(`Failed to fetch body "${url}"`);
+				continue;
+			}
+
+			if (imageData.length > maxContentLength) {
+				imageErrorList.push(`Image data is larger than 6 MiB ${url}`);
+				continue;
+			}
 
 			imagePart.image_url.url = `data:${mimeType};base64,${imageData.toString('base64')}`;
 			// TODO: cache
