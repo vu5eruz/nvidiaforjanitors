@@ -254,7 +254,7 @@ export default {
 			// JanitorAI adds the user's persona name at the start of most user messages.
 			// Remove this, if present, so we can correctly parse commands at the start.
 			let personaName = '';
-			const personaNameMatch = content.match(/^[^:]+: /);
+			const personaNameMatch = content.match(/^[^:\n]+: /);
 			if (personaNameMatch) {
 				content = content.substring(personaNameMatch[0].length);
 				personaName = personaNameMatch[0];
