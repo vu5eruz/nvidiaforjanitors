@@ -245,7 +245,7 @@ export default {
 		// 	5. If any image couldn't be retrieved, an error is shown to the user with the list of
 		// 		all URLs that failed to fetch.
 
-		const imageParts: JaiMessageContentImage[] = [];
+		const imagePayloadsMap = new Map<string, JaiMessageContentImage[]>();
 		for (let i = 0; i < payload.messages.length; ++i) {
 			const message = payload.messages[i];
 			// Don't concern ourselves with images in the chat messages that aren't ours.
@@ -269,13 +269,17 @@ export default {
 			const prefix = content.substring(0, left).trim();
 			const suffix = content.substring(right).trim();
 
+			const imageUrl = match[1];
 			const imagePayload: JaiMessageContentImage = {
 				type: 'image_url',
 				image_url: {
-					url: match[1],
+					url: imageUrl,
 				},
 			};
-			imageParts.push(imagePayload);
+
+			// Map.getOrInsert is unavailable V_V
+			if (imagePayloadsMap.has(imageUrl)) imagePayloadsMap.get(imageUrl)!.push(imagePayload);
+			else imagePayloadsMap.set(imageUrl, [imagePayload]);
 
 			const newMessages: JaiMessage[] = [];
 			if (prefix) newMessages.push({ content: personaName + prefix, role: 'user' });
@@ -291,7 +295,7 @@ export default {
 		// TODO: cache layer
 
 		// Resolve uncached images
-		if (imageParts.length > 10) {
+		if (imagePayloadsMap.size > 10) {
 			// An user might hit this error if they resume an old chat with lots of images.
 			// Increase the limit once someone complains.
 			return errorResponse(403, 'No more than 10 //image commands allowed.');
@@ -309,14 +313,14 @@ export default {
 
 		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
-		for (const imagePart of imageParts) {
-			console.log(imagePart.image_url.url);
+		for (const [imageUrl, imagePayloads] of imagePayloadsMap) {
+			console.log(imageUrl);
 
 			let url: URL;
 			try {
-				url = new URL(imagePart.image_url.url);
+				url = new URL(imageUrl);
 			} catch {
-				imageErrorList.push(`Invalid URL "${imagePart.image_url.url}"`);
+				imageErrorList.push(`Invalid URL "${imageUrl}"`);
 				continue;
 			}
 
@@ -371,7 +375,11 @@ export default {
 				continue;
 			}
 
-			imagePart.image_url.url = `data:${mimeType};base64,${imageData.toString('base64')}`;
+			const encodedImageData = `data:${mimeType};base64,${imageData.toString('base64')}`;
+			for (const imagePayload of imagePayloads) {
+				imagePayload.image_url.url = encodedImageData;
+			}
+
 			// TODO: cache
 		}
 
