@@ -390,8 +390,8 @@ export default {
 			status: response.status,
 			statusText: response.statusText,
 			headers: {
+				...Object.fromEntries(response.headers),
 				...corsHeaders,
-				...response.headers,
 			},
 		});
 	},
