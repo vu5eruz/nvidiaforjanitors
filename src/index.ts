@@ -385,7 +385,7 @@ export default {
 
 		if (imageErrorList.length > 0) {
 			for (const imageError of imageErrorList) console.log(imageError);
-			return errorResponse(503, "Proxy couldn't resolve image(s):" + imageErrorList.map((e) => `\n - ${e}`));
+			return errorResponse(503, "Proxy couldn't resolve image(s):" + imageErrorList.map((e) => `\n - ${e}`).join(''));
 		}
 
 		//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---

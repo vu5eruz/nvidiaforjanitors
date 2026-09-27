@@ -300,6 +300,22 @@ describe('//image command embedding', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(imageFetches(fetchMock)).toHaveLength(1);
 	});
+
+	it('lists all failed URLs when multiple images were provided', async () => {
+		const fetchMock = stubFetch();
+		const response = await fetchWorker(
+			postJson({
+				...VALID_PAYLOAD,
+				messages: [{ content: '//image https://example.test/gone.png\n//image https://example.test/lost.png', role: 'user' }],
+			}),
+		);
+		expect(response.status).toBe(503);
+		expect(await response.text()).toBe(
+			"\nProxy couldn't resolve image(s):\n - Got 404 from https://example.test/gone.png\n - Got 404 from https://example.test/lost.png",
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(imageFetches(fetchMock)).toHaveLength(2);
+	});
 });
 
 describe('upstream responses', () => {
