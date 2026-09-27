@@ -3,7 +3,7 @@ import worker from '../src/index';
 import { env } from 'cloudflare:workers';
 
 /**
- * Unit tests for the responses `src/index.ts` can emit.
+ * Unit tests for the error responses `src/index.ts` can emit.
  *
  * Every request below is rejected by the worker itself, before it dispatches
  * anything to NVIDIA NIM, so these tests never touch the network. The few
