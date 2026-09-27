@@ -1,13 +1,38 @@
 import 'zod/compile';
 import z from 'zod';
 
+// As of September 26, 2026, JanitorAI only supports sending plain text in messages.
+// Should JAI some day add image support matching the schema, the proxy shall let it
+// pass through unmodified.
+
+const JaiMessageText = z.string().trim().nonempty();
+type JaiMessageText = z.infer<typeof JaiMessageText>;
+
+const JaiMessageContentText = z.object({
+	type: z.literal('text'),
+	text: JaiMessageText,
+});
+type JaiMessageContentText = z.infer<typeof JaiMessageContentText>;
+
+const JaiMessageContentImage = z.object({
+	type: z.literal('image_url'),
+	image_url: z.object({
+		url: z.string().nonempty(),
+	}),
+});
+type JaiMessageContentImage = z.infer<typeof JaiMessageContentImage>;
+
+const JaiMessageContent = z.union([JaiMessageContentText, JaiMessageContentImage]);
+type JaiMessageContent = z.infer<typeof JaiMessageContent>;
+
+const JaiMessage = z.object({
+	content: z.union([JaiMessageText, z.array(JaiMessageContent).nonempty()]),
+	role: z.enum(['system', 'user', 'assistant']),
+});
+type JaiMessage = z.infer<typeof JaiMessage>;
+
 const JaiRequest = z.object({
-	messages: z.array(
-		z.object({
-			content: z.string().trim().nonempty(),
-			role: z.enum(['system', 'user', 'assistant']),
-		}),
-	),
+	messages: z.array(JaiMessage).nonempty(),
 	model: z.string().nonempty(),
 	stream: z.boolean().optional(),
 	/////
@@ -18,7 +43,6 @@ const JaiRequest = z.object({
 	top_k: z.number().optional(),
 	top_p: z.number().optional(),
 });
-
 type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
@@ -178,6 +202,154 @@ export default {
 		// Select error response function depending on whether the request is a proxy test.
 		const errorResponse = isProxyTest ? errorResponseForProxyTest : errorResponseForChatMessage;
 
+		//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---
+
+		// Embed external images from chat commands into the request payload.
+		// This goes as follow:
+		// 	1. The user includes commands in their chat message. For example:
+		//
+		// 			Lorem ipsum
+		// 			//image https://example.com/test.png
+		// 			dolor sit amet.
+		//
+		// 	2. The code accumulates a list of URLs to retrieve and where to put the image data,
+		// 		then each message is split into its text content and image_url content parts as follow:
+		//
+		// 			{
+		//				content: "Lorem ipsum",
+		// 				role: "user"
+		// 			},
+		// 			{
+		//				content: [{
+		// 					type: "image_url",
+		// 					image_url: {
+		// 						url: "https://example.com/test.png",
+		// 					},
+		// 				}],
+		// 				role: "user"
+		// 			},
+		// 			{
+		//				content: "dolor sit amet.",
+		// 				role: "user"
+		// 			},
+		//
+		//	3. The code tries to retrieve all the images from the image cache, then injects
+		// 		into the payload all found images into their respective content.image_url.url as follow:
+		//
+		//			`data:${mimeType};base64,${imageData}`
+		//
+		// 	4. Images that weren't found in the cache are fetched from the network, inspected
+		// 		for their mime type, stored in the cache with an expirationTtl of 1 hour, and then
+		// 		injected into the payload.
+		//
+		// 	5. If any image couldn't be retrieved, an error is shown to the user with the list of
+		// 		all URLs that failed to fetch.
+
+		const imageParts: JaiMessageContentImage[] = [];
+		for (let i = 0; i < payload.messages.length; ++i) {
+			const message = payload.messages[i];
+			// Don't concern ourselves with images in the chat messages that aren't ours.
+			if (message.role !== 'user' || typeof message.content !== 'string') continue;
+			// - Don't accept whitespace other than spaces since users on JanitorAI are
+			// 	 unlikely if not unable to type such things. If they actually do type some, then
+			//   it shall be quietly ignored until an user complains.
+			// - Grab everything as part of the URL. It is up to the user to type a valid URL.
+			const match = message.content.match(/^ *\/\/image +(\S+) *$/dm);
+			if (!match) continue;
+			const [left, right] = match.indices![0];
+			const prefix = message.content.substring(0, left).trim();
+			const suffix = message.content.substring(right).trim();
+
+			const imagePayload: JaiMessageContentImage = {
+				type: 'image_url',
+				image_url: {
+					url: match[1],
+				},
+			};
+			imageParts.push(imagePayload);
+
+			const newMessages: JaiMessage[] = [];
+			if (prefix) newMessages.push({ content: prefix, role: 'user' });
+			newMessages.push({ content: [imagePayload], role: 'user' });
+			if (suffix) newMessages.push({ content: suffix, role: 'user' });
+			payload.messages.splice(i, 1, ...newMessages);
+
+			// Make sure that the index, when incremented, lands on the suffix, if present, of
+			// this message, so the next iteration can process any additional //image commands.
+			i += newMessages.length - (suffix ? 2 : 1);
+		}
+
+		// TODO: cache layer
+
+		// Resolve uncached images
+		if (imageParts.length > 10) {
+			// An user might hit this error if they resume an old chat with lots of images.
+			// Increase the limit once someone complains.
+			return errorResponse(403, 'No more than 10 //image commands allowed.');
+		}
+
+		// TODO: Promise.all this stuff, then Promise.race it against a timeout.
+		const imageErrorList: string[] = [];
+		for (const imagePart of imageParts) {
+			let url: URL;
+			try {
+				url = new URL(imagePart.image_url.url);
+			} catch {
+				imageErrorList.push(`Invalid URL "${imagePart.image_url.url}"`);
+				continue;
+			}
+
+			if (!['http:', 'https:'].includes(url.protocol)) {
+				imageErrorList.push(`Non-HTTP(S) URL disallowed "${url}"`);
+				continue;
+			}
+
+			let response: Response;
+			try {
+				response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+			} catch {
+				imageErrorList.push(`Failed to fetch "${url}"`);
+				continue;
+			}
+
+			if (response.status !== 200) {
+				imageErrorList.push(`Got ${response.status} from ${url}`);
+				continue;
+			}
+
+			const contentLength = Number.parseInt((response.headers.get('Content-Length') || '').trim(), 10);
+			if (Number.isNaN(contentLength) || contentLength <= 0) {
+				imageErrorList.push(`Missing/Invalid Content-Length ${url}`);
+				continue;
+			}
+			if (contentLength > 8 * 1024 * 1024) {
+				imageErrorList.push(`Content-Length is larger than 8 MiB ${url}`);
+				continue;
+			}
+
+			// Let's not allow something as cursed as "image/png; charset=utf-8".
+			const mimeType = (response.headers.get('Content-Type') || '').trim().toLowerCase();
+			if (!['image/png', 'image/jpeg'].includes(mimeType)) {
+				imageErrorList.push(`Not a PNG or JPEG from ${url}`);
+				continue;
+			}
+
+			// While a malicious server can send a response so big it leads the worker to OOM,
+			// a faster way to cause OOM is having the user make a massive request. For simplicity
+			// of implementation, we trust the users and external servers not to OOM the worker.
+			const imageData = Buffer.from(await response.arrayBuffer());
+
+			imagePart.image_url.url = `data:${mimeType};base64,${imageData.toString('base64')}`;
+			// TODO: cache
+		}
+
+		if (imageErrorList.length > 0) {
+			for (const imageError of imageErrorList) console.log(imageError);
+			return errorResponse(503, "Proxy couldn't resolve image(s):" + imageErrorList.map((e) => `\n - ${e}`));
+		}
+
+		//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---
+
 		// Dispatch the request to NVIDIA NIM.
 		const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
 			method: 'POST',
@@ -196,7 +368,7 @@ export default {
 			let message: string = errorIsJson
 				? await response
 						.json()
-						.then((data: any) => data.detail)
+						.then((data: any) => data.detail || data.message)
 						.catch((error) => error)
 				: await response.text();
 			return errorResponse(response.status, message);
