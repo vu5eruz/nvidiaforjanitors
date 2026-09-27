@@ -86,7 +86,7 @@ export default {
 				return Response.redirect(url.origin, 301);
 			}
 			// TODO: Make a pretty home page on Static Assets
-			return new Response('Hello, World!');
+			return new Response('Hello, Images!');
 		}
 
 		// Handle CORS-preflight requests.
@@ -291,6 +291,8 @@ export default {
 		// TODO: Promise.all this stuff, then Promise.race it against a timeout.
 		const imageErrorList: string[] = [];
 		for (const imagePart of imageParts) {
+			console.log(imagePart.image_url.url);
+
 			let url: URL;
 			try {
 				url = new URL(imagePart.image_url.url);

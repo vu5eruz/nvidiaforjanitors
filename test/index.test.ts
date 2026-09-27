@@ -105,7 +105,7 @@ describe('301 redirect for browser traffic', () => {
 	it('serves the landing page on the root path', async () => {
 		const response = await fetchWorker(newRequest('/'));
 		expect(response.status).toBe(200);
-		expect(await response.text()).toBe('Hello, World!');
+		expect(await response.text()).toBe('Hello, Images!');
 	});
 });
 
