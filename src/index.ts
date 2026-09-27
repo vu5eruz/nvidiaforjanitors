@@ -250,15 +250,24 @@ export default {
 			const message = payload.messages[i];
 			// Don't concern ourselves with images in the chat messages that aren't ours.
 			if (message.role !== 'user' || typeof message.content !== 'string') continue;
+			let content = message.content;
+			// JanitorAI adds the user's persona name at the start of most user messages.
+			// Remove this, if present, so we can correctly parse commands at the start.
+			let personaName = '';
+			const personaNameMatch = content.match(/^[^:]+: /);
+			if (personaNameMatch) {
+				content = content.substring(personaNameMatch[0].length);
+				personaName = personaNameMatch[0];
+			}
 			// - Don't accept whitespace other than spaces since users on JanitorAI are
 			// 	 unlikely if not unable to type such things. If they actually do type some, then
 			//   it shall be quietly ignored until an user complains.
 			// - Grab everything as part of the URL. It is up to the user to type a valid URL.
-			const match = message.content.match(/^ *\/\/image +(\S+) *$/dm);
+			const match = content.match(/^ *\/\/image +(\S+) *$/dm);
 			if (!match) continue;
 			const [left, right] = match.indices![0];
-			const prefix = message.content.substring(0, left).trim();
-			const suffix = message.content.substring(right).trim();
+			const prefix = content.substring(0, left).trim();
+			const suffix = content.substring(right).trim();
 
 			const imagePayload: JaiMessageContentImage = {
 				type: 'image_url',
@@ -269,9 +278,9 @@ export default {
 			imageParts.push(imagePayload);
 
 			const newMessages: JaiMessage[] = [];
-			if (prefix) newMessages.push({ content: prefix, role: 'user' });
+			if (prefix) newMessages.push({ content: personaName + prefix, role: 'user' });
 			newMessages.push({ content: [imagePayload], role: 'user' });
-			if (suffix) newMessages.push({ content: suffix, role: 'user' });
+			if (suffix) newMessages.push({ content: personaName + suffix, role: 'user' });
 			payload.messages.splice(i, 1, ...newMessages);
 
 			// Make sure that the index, when incremented, lands on the suffix, if present, of
