@@ -10,7 +10,15 @@
 	"kv_namespaces": [
 		{
 			"binding": "IMAGE_CACHE",
-			"id": "<REPLACE_ME>",
+			"id": "13e0e86bcb924b8291e7515ec52fed84",
 		},
 	],
+	"previews": {
+		"kv_namespaces": [
+			{
+				"binding": "IMAGE_CACHE",
+				"id": "<REPLACE_ME>",
+			},
+		],
+	},
 }
