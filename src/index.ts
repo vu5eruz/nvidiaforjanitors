@@ -394,7 +394,9 @@ export default {
 				imagePayload.image_url.url = encodedImageData;
 			}
 
-			env.IMAGE_CACHE.put(imageUrl, encodedImageData);
+			env.IMAGE_CACHE.put(imageUrl, encodedImageData, {
+				expirationTtl: 60 * 60,
+			});
 		}
 
 		// Log the stuff for observability
