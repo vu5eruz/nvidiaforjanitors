@@ -48,7 +48,7 @@ type JaiRequest = z.infer<typeof JaiRequest>;
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const userAgent = {
-			'User-Agent': 'nvidiaforjanitors/0.1',
+			'User-Agent': 'nvidiaforjanitors/0.1', // keeps this in sync with upstream.test.ts
 		};
 
 		// Prepare common response headers for permissive CORS support.

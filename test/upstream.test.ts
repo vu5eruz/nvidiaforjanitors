@@ -133,6 +133,7 @@ describe('upstream request', () => {
 			Accept: 'application/json, text/event-stream',
 			Authorization: 'Bearer nvapi-fake-key-for-tests',
 			'Content-Type': 'application/json',
+			'User-Agent': 'nvidiaforjanitors/0.1', // keeps this in sync with index.ts
 		});
 	});
 
