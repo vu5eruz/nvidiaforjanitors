@@ -333,87 +333,89 @@ export default {
 
 		const waitList: Promise<void>[] = [];
 
-		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
-		for (const [imageUrl, imagePayloads] of imagePayloadsMap) {
-			if (imageUrl.length > 512) {
-				imageErrorList.push(`URL too long "${imageUrl}"`);
-				continue;
-			}
 
-			let url: URL;
-			try {
-				url = new URL(imageUrl);
-			} catch {
-				imageErrorList.push(`Invalid URL "${imageUrl}"`);
-				continue;
-			}
+		await Promise.allSettled(
+			Array.from(imagePayloadsMap.entries()).map(async ([imageUrl, imagePayloads]) => {
+				if (imageUrl.length > 512) {
+					imageErrorList.push(`URL too long "${imageUrl}"`);
+					return;
+				}
 
-			if (!['http:', 'https:'].includes(url.protocol)) {
-				imageErrorList.push(`Non-HTTP(S) URL disallowed "${url}"`);
-				continue;
-			}
+				let url: URL;
+				try {
+					url = new URL(imageUrl);
+				} catch {
+					imageErrorList.push(`Invalid URL "${imageUrl}"`);
+					return;
+				}
 
-			let response: Response;
-			try {
-				response = await fetch(url, {
-					headers: userAgent,
-					signal: AbortSignal.timeout(10000),
-				});
-			} catch {
-				imageErrorList.push(`Failed to fetch "${url}"`);
-				continue;
-			}
+				if (!['http:', 'https:'].includes(url.protocol)) {
+					imageErrorList.push(`Non-HTTP(S) URL disallowed "${url}"`);
+					return;
+				}
 
-			if (response.status !== 200) {
-				imageErrorList.push(`Got ${response.status} from ${url}`);
-				continue;
-			}
+				let response: Response;
+				try {
+					response = await fetch(url, {
+						headers: userAgent,
+						signal: AbortSignal.timeout(10000),
+					});
+				} catch {
+					imageErrorList.push(`Failed to fetch "${url}"`);
+					return;
+				}
 
-			const contentLength = Number.parseInt((response.headers.get('Content-Length') || '').trim(), 10);
-			if (Number.isNaN(contentLength) || contentLength <= 0) {
-				imageErrorList.push(`Missing/Invalid Content-Length ${url}`);
-				continue;
-			}
-			if (contentLength > maxContentLength) {
-				imageErrorList.push(`Content-Length is larger than 6 MiB ${url}`);
-				continue;
-			}
+				if (response.status !== 200) {
+					imageErrorList.push(`Got ${response.status} from ${url}`);
+					return;
+				}
 
-			// Let's not allow something as cursed as "image/png; charset=utf-8".
-			const mimeType = (response.headers.get('Content-Type') || '').trim().toLowerCase();
-			if (!['image/png', 'image/jpeg'].includes(mimeType)) {
-				imageErrorList.push(`Not a PNG or JPEG from ${url}`);
-				continue;
-			}
+				const contentLength = Number.parseInt((response.headers.get('Content-Length') || '').trim(), 10);
+				if (Number.isNaN(contentLength) || contentLength <= 0) {
+					imageErrorList.push(`Missing/Invalid Content-Length ${url}`);
+					return;
+				}
+				if (contentLength > maxContentLength) {
+					imageErrorList.push(`Content-Length is larger than 6 MiB ${url}`);
+					return;
+				}
 
-			// While a malicious server can send a response so big it leads the worker to OOM,
-			// a faster way to cause OOM is having the user make a massive request. For simplicity
-			// of implementation, we trust the users and external servers not to OOM the worker.
-			let imageData: Buffer;
-			try {
-				imageData = Buffer.from(await response.arrayBuffer());
-			} catch {
-				imageErrorList.push(`Failed to fetch body "${url}"`);
-				continue;
-			}
+				// Let's not allow something as cursed as "image/png; charset=utf-8".
+				const mimeType = (response.headers.get('Content-Type') || '').trim().toLowerCase();
+				if (!['image/png', 'image/jpeg'].includes(mimeType)) {
+					imageErrorList.push(`Not a PNG or JPEG from ${url}`);
+					return;
+				}
 
-			if (imageData.length > maxContentLength) {
-				imageErrorList.push(`Image data is larger than 6 MiB ${url}`);
-				continue;
-			}
+				// While a malicious server can send a response so big it leads the worker to OOM,
+				// a faster way to cause OOM is having the user make a massive request. For simplicity
+				// of implementation, we trust the users and external servers not to OOM the worker.
+				let imageData: Buffer;
+				try {
+					imageData = Buffer.from(await response.arrayBuffer());
+				} catch {
+					imageErrorList.push(`Failed to fetch body "${url}"`);
+					return;
+				}
 
-			const encodedImageData = `data:${mimeType};base64,${imageData.toString('base64')}`;
-			for (const imagePayload of imagePayloads) {
-				imagePayload.image_url.url = encodedImageData;
-			}
+				if (imageData.length > maxContentLength) {
+					imageErrorList.push(`Image data is larger than 6 MiB ${url}`);
+					return;
+				}
 
-			waitList.push(
-				env.IMAGE_CACHE.put(imageUrl, encodedImageData, {
-					expirationTtl: 60 * 60,
-				}),
-			);
-		}
+				const encodedImageData = `data:${mimeType};base64,${imageData.toString('base64')}`;
+				for (const imagePayload of imagePayloads) {
+					imagePayload.image_url.url = encodedImageData;
+				}
+
+				waitList.push(
+					env.IMAGE_CACHE.put(imageUrl, encodedImageData, {
+						expirationTtl: 60 * 60,
+					}),
+				);
+			}),
+		);
 
 		if (waitList.length > 0) ctx.waitUntil(Promise.allSettled(waitList));
 
