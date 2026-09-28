@@ -437,6 +437,7 @@ export default {
 		//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---//---
 
 		// Dispatch the request to NVIDIA NIM.
+		const timingStart = performance.now();
 		const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
 			method: 'POST',
 			body: JSON.stringify(payload),
@@ -446,6 +447,10 @@ export default {
 				'Content-Type': 'application/json',
 				...userAgent,
 			},
+		});
+		const timingTotal = performance.now() - timingStart;
+		console.info({
+			message: `NVIDIA NIM replied with ${response.status} ${response.statusText} after ${(timingTotal / 1000).toFixed(0)} seconds`,
 		});
 
 		if (response.status !== 200) {
