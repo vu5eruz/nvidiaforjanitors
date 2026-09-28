@@ -296,6 +296,13 @@ export default {
 			i += newMessages.length - (suffix ? 2 : 1);
 		}
 
+		// Limit how many images can be in chat history in total
+		if (imagePayloadsMap.size > 10) {
+			// An user might hit this error if they resume an old chat with lots of images.
+			// Increase the limit once someone complains.
+			return errorResponse(403, 'No more than 10 //image commands allowed.');
+		}
+
 		// Inject cached images into the payload and remove them from imagePayloadsMap.
 		// After this, imagePayloadsMap becomes a map of uncached images.
 		let cachedImagesMap = new Map<string, string | null>();
@@ -312,13 +319,6 @@ export default {
 				}
 				imagePayloadsMap.delete(imageUrl);
 			}
-		}
-
-		// Resolve uncached images
-		if (imagePayloadsMap.size > 10) {
-			// An user might hit this error if they resume an old chat with lots of images.
-			// Increase the limit once someone complains.
-			return errorResponse(403, 'No more than 10 //image commands allowed.');
 		}
 
 		// Workers have a 128 MB memory limit per isolate.
