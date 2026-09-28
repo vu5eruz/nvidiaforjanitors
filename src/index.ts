@@ -46,7 +46,7 @@ const JaiRequest = z.object({
 type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
-	async fetch(request: Request, _env: Env): Promise<Response> {
+	async fetch(request: Request, env: Env): Promise<Response> {
 		// Prepare common response headers for permissive CORS support.
 		// All origins are allowed to maximize coverage. Since users have to first fully
 		// trust websites with their API keys, there are no security implications.
@@ -292,7 +292,23 @@ export default {
 			i += newMessages.length - (suffix ? 2 : 1);
 		}
 
-		// TODO: cache layer
+		// Inject cached images into the payload and remove them from imagePayloadsMap.
+		// After this, imagePayloadsMap becomes a map of uncached images.
+		let cachedImagesMap = new Map<string, string | null>();
+		if (imagePayloadsMap.size > 0) {
+			cachedImagesMap = await env.IMAGE_CACHE.get(Array.from(imagePayloadsMap.keys()));
+			for (const [imageUrl, encodedImageData] of cachedImagesMap) {
+				if (!encodedImageData) {
+					cachedImagesMap.delete(imageUrl); // pls let this be a safe operation!
+					continue;
+				}
+				const imagePayloads = imagePayloadsMap.get(imageUrl)!;
+				for (const imagePayload of imagePayloads) {
+					imagePayload.image_url.url = encodedImageData;
+				}
+				imagePayloadsMap.delete(imageUrl);
+			}
+		}
 
 		// Resolve uncached images
 		if (imagePayloadsMap.size > 10) {
@@ -314,8 +330,6 @@ export default {
 		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
 		for (const [imageUrl, imagePayloads] of imagePayloadsMap) {
-			console.log(imageUrl);
-
 			let url: URL;
 			try {
 				url = new URL(imageUrl);
@@ -380,11 +394,20 @@ export default {
 				imagePayload.image_url.url = encodedImageData;
 			}
 
-			// TODO: cache
+			env.IMAGE_CACHE.put(imageUrl, encodedImageData);
 		}
 
+		// Log the stuff for observability
+		if (cachedImagesMap.size > 0 || imagePayloadsMap.size > 0)
+			console.info({
+				images: {
+					cached: Array.from(cachedImagesMap.keys()),
+					fetch: Array.from(imagePayloadsMap.keys()),
+					errors: imageErrorList,
+				},
+			});
+
 		if (imageErrorList.length > 0) {
-			for (const imageError of imageErrorList) console.log(imageError);
 			return errorResponse(503, "Proxy couldn't resolve image(s):" + imageErrorList.map((e) => `\n - ${e}`).join(''));
 		}
 

@@ -12,6 +12,9 @@ import { env } from 'cloudflare:workers';
  * max_tokens flooring, //image embedding, unknown field stripping). How the
  * proxy surfaces upstream answers and errors back to the client is covered
  * at the bottom to complete the dispatch contract.
+ *
+ * Notice: when testing retrieval of images, make sure to use globally unique URLs
+ * as the image cache only gets cleared at the start of the test suite!
  */
 
 const HOST = 'https://proxy.example';
@@ -283,19 +286,19 @@ describe('//image command embedding', () => {
 	it('deduplicates image fetch calls during retrieval', async () => {
 		const fetchMock = stubFetch({
 			images: {
-				'https://example.test/a.png': imageResponse(PNG_BYTES, 'image/png'),
-				'https://example.test/b.jpg': imageResponse(JPEG_BYTES, 'image/jpeg'),
+				'https://example.test/xyz.png': imageResponse(PNG_BYTES, 'image/png'),
+				'https://example.test/123.jpg': imageResponse(JPEG_BYTES, 'image/jpeg'),
 			},
 		});
 		await fetchWorker(
 			postJson({
 				...VALID_PAYLOAD,
 				messages: [
-					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
-					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
-					{ content: 'Carl: //image https://example.test/a.png', role: 'user' },
-					{ content: 'Carl: //image https://example.test/b.jpg', role: 'user' },
-					{ content: 'Carl: //image https://example.test/b.jpg', role: 'user' },
+					{ content: 'Carl: //image https://example.test/xyz.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/xyz.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/xyz.png', role: 'user' },
+					{ content: 'Carl: //image https://example.test/123.jpg', role: 'user' },
+					{ content: 'Carl: //image https://example.test/123.jpg', role: 'user' },
 				],
 			}),
 		);
