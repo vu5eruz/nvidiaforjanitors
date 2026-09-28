@@ -334,6 +334,11 @@ export default {
 		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
 		for (const [imageUrl, imagePayloads] of imagePayloadsMap) {
+			if (imageUrl.length > 512) {
+				imageErrorList.push(`URL too long "${imageUrl}"`);
+				continue;
+			}
+
 			let url: URL;
 			try {
 				url = new URL(imageUrl);
