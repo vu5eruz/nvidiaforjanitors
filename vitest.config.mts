@@ -6,7 +6,7 @@ export default defineConfig({
 		cloudflareTest({
 			wrangler: { configPath: './wrangler.jsonc' },
 			miniflare: {
-				kvNamespaces: ['TEST_NAMESPACE'],
+				kvNamespaces: ['IMAGE_CACHE'],
 			},
 		}),
 	],
