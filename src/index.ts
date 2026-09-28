@@ -422,6 +422,7 @@ export default {
 		// Log the stuff for observability
 		if (cachedImagesMap.size > 0 || imagePayloadsMap.size > 0)
 			console.info({
+				message: `//images: ${cachedImagesMap.size} cached, ${imagePayloadsMap.size} fetched with ${imageErrorList.length} error(s)`,
 				images: {
 					cached: Array.from(cachedImagesMap.keys()),
 					fetch: Array.from(imagePayloadsMap.keys()),
