@@ -250,11 +250,11 @@ describe('//image command embedding', () => {
 	});
 
 	it.each([
-		['image/png', PNG_BYTES, PNG_DATA_URL],
-		['image/jpeg', JPEG_BYTES, JPEG_DATA_URL],
-	])('embeds %s images as data URLs under the fetched mime type', async (mimeType, bytes, dataUrl) => {
-		const fetchMock = stubFetch({ images: { 'https://example.test/pic': imageResponse(bytes, mimeType) } });
-		await fetchWorker(postJson({ ...VALID_PAYLOAD, messages: [{ content: '//image https://example.test/pic', role: 'user' }] }));
+		['https://example.test/pic.png', 'image/png', PNG_BYTES, PNG_DATA_URL],
+		['https://example.test/pic.jpg', 'image/jpeg', JPEG_BYTES, JPEG_DATA_URL],
+	])('embeds %s images as data URLs under the fetched mime type', async (url, mimeType, bytes, dataUrl) => {
+		const fetchMock = stubFetch({ images: { [url]: imageResponse(bytes, mimeType) } });
+		await fetchWorker(postJson({ ...VALID_PAYLOAD, messages: [{ content: `//image ${url}`, role: 'user' }] }));
 		expect(nimDispatch(fetchMock).body).toStrictEqual({
 			...VALID_PAYLOAD,
 			stream: false,
