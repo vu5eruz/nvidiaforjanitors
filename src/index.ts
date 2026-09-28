@@ -46,7 +46,7 @@ const JaiRequest = z.object({
 type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const userAgent = {
 			'User-Agent': 'nvidiaforjanitors/0.1', // keeps this in sync with upstream.test.ts
 		};
@@ -331,6 +331,8 @@ export default {
 		// Let's hope that leaves enough wiggle room for anything else going on.
 		const maxContentLength = 6 * 1024 * 1024;
 
+		const waitList: Promise<void>[] = [];
+
 		// TODO: Promise.all this stuff
 		const imageErrorList: string[] = [];
 		for (const [imageUrl, imagePayloads] of imagePayloadsMap) {
@@ -406,10 +408,14 @@ export default {
 				imagePayload.image_url.url = encodedImageData;
 			}
 
-			env.IMAGE_CACHE.put(imageUrl, encodedImageData, {
-				expirationTtl: 60 * 60,
-			});
+			waitList.push(
+				env.IMAGE_CACHE.put(imageUrl, encodedImageData, {
+					expirationTtl: 60 * 60,
+				}),
+			);
 		}
+
+		if (waitList.length > 0) ctx.waitUntil(Promise.allSettled(waitList));
 
 		// Log the stuff for observability
 		if (cachedImagesMap.size > 0 || imagePayloadsMap.size > 0)

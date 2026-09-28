@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import worker from '../src/index';
 import { env } from 'cloudflare:workers';
+import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 
 /**
  * Unit tests for the requests `src/index.ts` dispatches to NVIDIA NIM.
@@ -117,8 +118,10 @@ function postJson(payload: unknown, headers: Record<string, string> = {}): Reque
 }
 
 async function fetchWorker(request: Request): Promise<Response> {
-	// The handler's fetch takes (request, env) and never touches ctx.
-	return worker.fetch(request, env);
+	const ctx = createExecutionContext();
+	const res = worker.fetch(request, env, ctx);
+	await waitOnExecutionContext(ctx);
+	return res;
 }
 
 describe('upstream request', () => {
