@@ -47,6 +47,10 @@ type JaiRequest = z.infer<typeof JaiRequest>;
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
+		const userAgent = {
+			'User-Agent': 'nvidiaforjanitors/0.1',
+		};
+
 		// Prepare common response headers for permissive CORS support.
 		// All origins are allowed to maximize coverage. Since users have to first fully
 		// trust websites with their API keys, there are no security implications.
@@ -345,7 +349,10 @@ export default {
 
 			let response: Response;
 			try {
-				response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+				response = await fetch(url, {
+					headers: userAgent,
+					signal: AbortSignal.timeout(10000),
+				});
 			} catch {
 				imageErrorList.push(`Failed to fetch "${url}"`);
 				continue;
@@ -423,6 +430,7 @@ export default {
 				Accept: 'application/json, text/event-stream',
 				Authorization: `Bearer ${rawApiKeys[0]}`,
 				'Content-Type': 'application/json',
+				...userAgent,
 			},
 		});
 
