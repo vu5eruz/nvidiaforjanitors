@@ -303,6 +303,11 @@ export default {
 			return errorResponse(403, 'No more than 10 //image commands allowed.');
 		}
 
+		// Limit max key size before reaching out to KV
+		if (Array.from(imagePayloadsMap.keys()).some((k) => k.length > 512)) {
+			return errorResponse(403, '//image URLs cannot be longer than 512 characters');
+		}
+
 		// Inject cached images into the payload and remove them from imagePayloadsMap.
 		// After this, imagePayloadsMap becomes a map of uncached images.
 		let cachedImagesMap = new Map<string, string | null>();
@@ -337,11 +342,6 @@ export default {
 
 		await Promise.allSettled(
 			Array.from(imagePayloadsMap.entries()).map(async ([imageUrl, imagePayloads]) => {
-				if (imageUrl.length > 512) {
-					imageErrorList.push(`URL too long "${imageUrl}"`);
-					return;
-				}
-
 				let url: URL;
 				try {
 					url = new URL(imageUrl);
