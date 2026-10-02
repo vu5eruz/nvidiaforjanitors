@@ -5,7 +5,7 @@ import z from 'zod';
 // Should JAI some day add image support matching the schema, the proxy shall let it
 // pass through unmodified.
 
-const JaiMessageText = z.string().trim().nonempty();
+const JaiMessageText = z.string().trim();
 type JaiMessageText = z.infer<typeof JaiMessageText>;
 
 const JaiMessageContentText = z.object({
