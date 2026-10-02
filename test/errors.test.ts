@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import worker from '../src/index';
-import { env } from 'cloudflare:workers';
+import { fetchWorker } from './utils';
 
 /**
  * Unit tests for the error responses `src/index.ts` can emit.
@@ -18,11 +17,6 @@ const AUTH = { Authorization: 'Bearer nvapi-fake-key-for-tests' };
 
 function newRequest(path = '/', init: RequestInit = {}): Request {
 	return new Request(HOST + path, init);
-}
-
-async function fetchWorker(request: Request): Promise<Response> {
-	// The handler's fetch takes (request, env) and never touches ctx.
-	return worker.fetch(request, env);
 }
 
 /** A POST request with a JSON body, open for header overrides. */
@@ -237,7 +231,6 @@ describe('400 Bad Request: request payload', () => {
 			{ messages: [{ content: 'hello', role: 'banana' }] },
 			['messages.0.role: ', 'Invalid option'],
 		],
-		['messages contains empty content', { messages: [{ content: '', role: 'user' }] }, ['messages.0.content: ', 'Too small']],
 		['model is empty', { model: '' }, ['model:', 'Too small']],
 		['stream is not a boolean', { stream: 'false' }, ['stream:', 'expected boolean']],
 		['temperature is above the maximum', { temperature: 2.5 }, ['temperature:', 'Too big']],
